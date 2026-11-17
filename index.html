@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notchwork</title>
+<meta name="description" content="A six-rotor cipher machine with a notch key. Works offline.">
+<meta name="theme-color" content="#17131e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17131e;
+    --panel: #2b2437;
+    --panel-hi: #4d4260;
+    --edge: #0d0a12;
+    --tile: #efdcbc;
+    --tile-lo: #c9ae86;
+    --ink: #2b2131;
+    --amber: #ffab33;
+    --amber-hi: #ffd28a;
+    --amber-lo: #9a5a14;
+    --red: #d4343e;
+    --red-lo: #7b1520;
+    --slot: #110e17;
+    --slot-hi: #756783;
+    --text: #d8cce6;
+    --dim: #85789a;
+    --pixel: 'Silkscreen', 'Courier New', monospace;
+    --term: 'VT323', ui-monospace, 'Courier New', monospace;
+    --t: clamp(28px, 6.6vw, 46px);   /* width of one rotor window */
+    --tooth: 8px;                    /* ridge spacing on the wheels */
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(8px, 2vw, 24px);
+    background:
+      radial-gradient(1100px 560px at 50% -12%, #3a2f4d 0%, transparent 62%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--term);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .machine {
+    width: min(940px, 100%);
+    padding: clamp(12px, 3vw, 22px);
+    background: linear-gradient(#2e2739, #231d2e);
+    border: 4px solid var(--edge);
+    border-radius: 14px;
+    box-shadow: inset 0 0 0 3px var(--panel-hi), 0 24px 60px rgba(0, 0, 0, .55);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ---------- top row ---------- */
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+
+  .nameplate {
+    flex: 1;
+    margin: 6px 0 0;
+    text-align: center;
+    font-family: var(--pixel);
+    font-size: 12px;
+    font-weight: 400;
+    color: #6f6384;
+  }
+
+  .module {
+    background: var(--bg);
+    border: 3px solid var(--edge);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 2px var(--panel-hi);
+    padding: 10px 12px;
+  }
+
+  /* slider: S / 0 / R */
+  .slider-module {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .slider { display: flex; gap: 8px; }
+
+  .track {
+    position: relative;
+    width: 34px;
+    height: calc(var(--t) * 2.3);
+    --kh: 16px;
+  }
+
+  .track::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 4px;
+    bottom: 4px;
+    width: 10px;
+    margin-left: -5px;
+    background: var(--slot);
+    border: 2px solid var(--slot-hi);
+    border-radius: 6px;
+  }
+
+  .knob {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: var(--kh);
+    top: calc(var(--k, .5) * (100% - var(--kh)));
+    background: linear-gradient(#ef5a64, var(--red));
+    border: 2px solid var(--red-lo);
+    border-radius: 5px;
+    box-shadow: 0 2px 0 var(--edge);
+    cursor: grab;
+    touch-action: none;
+    transition: top .28s cubic-bezier(.3, 1.4, .5, 1);
+  }
+  .knob.drag { transition: none; cursor: grabbing; }
+
+  .stops {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: calc(var(--t) * 2.3);
+  }
+
+  .stop {
+    font: 400 13px/16px var(--pixel);
+    color: var(--tile);
+    background: none;
+    border: 0;
+    padding: 0 2px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .stop:hover { color: var(--amber); }
+  .stop.rest { color: var(--dim); cursor: default; }
+  .stop.rest:hover { color: var(--dim); }
+
+  .readout { font-size: 17px; line-height: 1; color: var(--dim); }
+  .readout b { font: 400 11px var(--pixel); color: var(--tile); letter-spacing: .12em; margin-left: 4px; }
+
+  /* rotors */
+  .rotor-module {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .rotors { display: flex; gap: calc(var(--t) * .14); }
+
+  .unit {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--t) * .08);
+  }
+
+  .window {
+    position: relative;
+    width: var(--t);
+    height: calc(var(--t) * 1.25);
+    perspective: 260px;
+    cursor: ns-resize;
+    touch-action: none;
+  }
+
+  .unit.sel .window {
+    outline: 2px solid #8d7fa1;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  .machine.notch-mode .unit.sel .window { outline-color: var(--amber); }
+
+  .lid, .drum {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    border: 2px solid var(--edge);
+    font-family: var(--pixel);
+    font-weight: 700;
+    font-size: calc(var(--t) * .56);
+    line-height: 1;
+  }
+
+  .drum {
+    background: linear-gradient(90deg, #0d0a12, #4b4058 28%, #85768f 50%, #4b4058 72%, #0d0a12);
+    color: var(--amber);
+    text-shadow: 0 0 8px var(--amber), 0 2px 0 #000;
+  }
+  .drum .cut {
+    position: absolute;
+    right: -3px;
+    top: 50%;
+    width: 6px;
+    height: 10px;
+    margin-top: -5px;
+    background: var(--edge);
+    border-radius: 2px 0 0 2px;
+  }
+
+  .lid {
+    background: linear-gradient(#f5e6c9, var(--tile) 55%, var(--tile-lo));
+    color: var(--ink);
+    transform-origin: 50% 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: transform .55s cubic-bezier(.3, 1.2, .4, 1), opacity .25s .2s;
+  }
+  .lid .glare {
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    pointer-events: none;
+    background:
+      linear-gradient(120deg, rgba(255,255,255,.6) 0 16%, transparent 16% 27%, rgba(255,255,255,.28) 27% 34%, transparent 34%);
+  }
+  .machine.notch-mode .lid { transform: rotateX(112deg); opacity: 0; pointer-events: none; }
+
+  .tick { animation: tick .16s ease-out; }
+  @keyframes tick {
+    from { transform: translateY(-38%); opacity: .25; }
+    to   { transform: none; opacity: 1; }
+  }
+
+  .wheel {
+    position: relative;
+    width: calc(var(--t) * .34);
+    height: calc(var(--t) * 2.25);
+    background: var(--slot);
+    border: 2px solid var(--slot-hi);
+    border-radius: 99px;
+    overflow: hidden;
+    cursor: ns-resize;
+    touch-action: none;
+  }
+  .wheel::before {
+    content: '';
+    position: absolute;
+    inset: 3px 2px;
+    border-radius: 99px;
+    background: repeating-linear-gradient(to bottom, #9a8bab 0 3px, #2a2233 3px var(--tooth));
+    background-position: 0 var(--off, 0px);
+    transition: background-position .18s ease-out;
+  }
+  .wheel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,.8), transparent 28%, transparent 72%, rgba(0,0,0,.8));
+    pointer-events: none;
+  }
+  .machine.notch-mode .wheel::before {
+    background: repeating-linear-gradient(to bottom, #d9962f 0 3px, #3a2410 3px var(--tooth));
+    background-position: 0 var(--off, 0px);
+  }
+
+  .rotors.saved .lid { animation: saved .6s ease-out; }
+  @keyframes saved {
+    30% { filter: brightness(1.3) drop-shadow(0 0 7px var(--amber)); }
+  }
+
+  .machine.notch-mode .rotor-module {
+    box-shadow: inset 0 0 0 2px var(--amber-lo), 0 0 26px rgba(255, 171, 51, .28);
+  }
+
+  .rotor-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+  .lamp {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3b3249;
+    border: 2px solid var(--edge);
+    transition: background .2s, box-shadow .2s;
+  }
+  .machine.notch-mode .lamp { background: var(--amber); box-shadow: 0 0 12px 2px var(--amber); }
+
+  .btn {
+    font: 400 20px/1 var(--term);
+    color: var(--tile);
+    background: linear-gradient(#3a3248, var(--panel));
+    border: 3px solid var(--edge);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 2px var(--panel-hi), 0 3px 0 var(--edge);
+    padding: 6px 14px 5px;
+    cursor: pointer;
+    transition: transform .06s, box-shadow .06s;
+  }
+  .btn:hover { color: var(--amber-hi); }
+  .btn:active, .btn[aria-pressed="true"] {
+    transform: translateY(3px);
+    box-shadow: inset 0 0 0 2px var(--panel-hi), 0 0 0 var(--edge);
+  }
+  .btn[aria-pressed="true"] { color: var(--amber); }
+
+  /* ---------- status line ---------- */
+  .statusline {
+    min-height: 2.5em;
+    margin: 0 0 10px;
+    text-align: center;
+    font-size: 20px;
+    line-height: 1.25;
+    color: var(--dim);
+  }
+
+  /* ---------- display ---------- */
+  .screen {
+    position: relative;
+    min-height: 190px;
+    padding: 12px 18px 14px;
+    background: #0d0a12;
+    border: 4px solid var(--edge);
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 3px #3b3249, inset 0 0 46px rgba(255, 171, 51, .09);
+    overflow: hidden;
+  }
+  .screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .5));
+    z-index: 2;
+  }
+  .screen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.04) 0 1px, transparent 1px 3px);
+    z-index: 2;
+  }
+  .screen.reject { animation: shake .22s; }
+  @keyframes shake {
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  .screen-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 18px;
+    color: #6f6384;
+  }
+  .screen-head .amber { color: var(--amber); }
+
+  .screen-text {
+    margin-top: 4px;
+    min-height: 3.4em;
+    max-height: 6.8em;
+    overflow-y: auto;
+    font-size: clamp(30px, 5.4vw, 42px);
+    line-height: 1.12;
+    color: #ffc46b;
+    text-shadow: 0 0 9px rgba(255, 171, 51, .55);
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+    scrollbar-width: thin;
+    scrollbar-color: #4d4260 transparent;
+  }
+  .placeholder { opacity: .38; }
+  .cursor {
+    display: inline-block;
+    width: .5em;
+    height: .85em;
+    margin-left: 2px;
+    background: #ffc46b;
+    vertical-align: -.08em;
+    animation: blink 1.05s steps(2, start) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+
+  .screen-in {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed #3b3249;
+    min-height: 1.6em;
+    max-height: 3.4em;
+    overflow-y: auto;
+    font-size: 22px;
+    line-height: 1.1;
+    color: #6f6384;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .screen-actions { display: flex; justify-content: flex-end; gap: 10px; margin: 10px 0 16px; }
+
+  /* ---------- keyboard ---------- */
+  .keyboard {
+    --k: min(46px, calc((100vw - 64px) / 10.9));
+    --g: calc(var(--k) * .16);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--g);
+  }
+  .krow { display: flex; gap: var(--g); }
+
+  .key {
+    width: var(--k);
+    height: var(--k);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    font: 400 calc(var(--k) * .4)/1 var(--pixel);
+    color: #e4d6c0;
+    background: radial-gradient(circle at 35% 28%, #5a4e6b, #261f31 72%);
+    border: 3px solid var(--edge);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 2px #5b4f6b, 0 3px 0 var(--edge);
+    cursor: pointer;
+    transition: transform .06s, background .1s, box-shadow .1s, color .1s;
+    touch-action: manipulation;
+  }
+  .key.space { width: calc(var(--k) * 6.2); border-radius: calc(var(--k) / 2); font-size: calc(var(--k) * .3); }
+  .key.fn { font-size: calc(var(--k) * .5); }
+  .key.lit {
+    color: #2a1604;
+    background: radial-gradient(circle at 35% 28%, #ffe0a8, #f08a1c 75%);
+    box-shadow: inset 0 0 0 2px #ffe9c4, 0 0 20px 5px rgba(255, 171, 51, .8);
+    transform: translateY(2px);
+  }
+
+  /* ---------- help ---------- */
+  .help {
+    margin-top: 18px;
+    font: 15px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--dim);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .help summary { cursor: pointer; color: var(--tile); }
+  .help ol { margin: 8px 0 0; padding-left: 1.3em; max-width: 62ch; }
+  .help li { margin-bottom: 4px; }
+
+  @media (max-width: 640px) {
+    :root { --t: clamp(24px, 6.2vw, 46px); }
+    .nameplate { display: none; }
+    .top { flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .module { padding: 8px; }
+    .readout b { letter-spacing: .06em; }
+    .screen { min-height: 160px; padding: 10px 12px 12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lid, .knob, .wheel::before, .key { transition: none; }
+    .tick, .screen.reject, .rotors.saved .lid, .cursor { animation: none; }
+  }
+</style>
+</head>
+<body>
+<noscript>This machine needs JavaScript turned on.</noscript>
+
+<main class="machine" id="machine">
+
+  <header class="top">
+    <section class="module slider-module" aria-label="Start position">
+      <div class="slider">
+        <div class="track" id="track">
+          <div class="knob" id="knob"></div>
+        </div>
+        <div class="stops">
+          <button class="stop" data-act="S" tabindex="-1" title="Save the current rotor letters as the start position">S</button>
+          <button class="stop rest" tabindex="-1" disabled>0</button>
+          <button class="stop" data-act="R" tabindex="-1" title="Reset the rotors to the saved start position">R</button>
+        </div>
+      </div>
+      <div class="readout">start<b id="startReadout"></b></div>
+    </section>
+
+    <h1 class="nameplate">Notchwork</h1>
+
+    <section class="module rotor-module" aria-label="Rotors">
+      <div class="rotors" id="rotors"></div>
+      <div class="rotor-controls">
+        <span class="lamp" id="lamp"></span>
+        <button class="btn" id="notchBtn" aria-pressed="false" tabindex="-1" title="Open the rotors to set the notches">Notch</button>
+      </div>
+    </section>
+  </header>
+
+  <p class="statusline" id="hint"></p>
+
+  <section class="screen" id="screen" aria-label="Display">
+    <div class="screen-head"><span>Output</span><span id="status">ready</span></div>
+    <div class="screen-text" id="out" aria-live="polite"></div>
+    <div class="screen-in"><span id="inEcho"></span></div>
+  </section>
+  <div class="screen-actions">
+    <button class="btn" id="copyBtn" tabindex="-1">Copy</button>
+    <button class="btn" id="clearBtn" tabindex="-1">Clear</button>
+  </div>
+
+  <section class="keyboard" id="keyboard" aria-label="Keyboard"></section>
+
+  <details class="help">
+    <summary>How to use it</summary>
+    <ol>
+      <li>Press <b>Notch</b>. The glass lids open. Click a rotor, then type a letter or number, or drag its wheel. Press <b>Notch</b> again to close the lids.</li>
+      <li>Set the start position by dragging the wheels, scrolling over them, or clicking a rotor and pressing the up and down arrow keys. Push the red slider to <b>S</b> to save it.</li>
+      <li>Type your message on your keyboard or tap the keys. The screen shows the coded text.</li>
+      <li>To decode, enter the same notches and start position, then type the coded text. Both sides must match exactly.</li>
+      <li>Push the slider to <b>R</b> to rewind the rotors to the saved start before a new message. Backspace undoes the last symbol. <b>Clear</b> wipes the screen.</li>
+    </ol>
+  </details>
+
+</main>
+
+<script>
+(() => {
+'use strict';
+
+// ==== ENGINE START ====
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const SIZE = 36;
+const NUM_ROTORS = 6;
+
+// Rotors 1-6 left to right. Identical to notchwork.py.
+const WIRINGS = [
+  'D5QELP7A8CI3JT0FVZ2W6YOUB94S1RNXGKHM',
+  'YSWFX5O17RZAPBDH0VI2GM4U9JKNEC8Q36LT',
+  '1CBF850ZKYLAUXMJ2WNDOIGQ6HRSTE3V94P7',
+  'GX4O965SAHIEN10UPZ7RKBYQL2J8FMWC3DTV',
+  'KZDF508LWV12GJQSOCH469IM3R7AYEUBXPNT',
+  '2KGE348IQWUDTBZFXAPCVOLHN6S90RJ7Y5M1'
+];
+const REFLECTOR = 'YV7ZJ210SE5W9ON46TIR8BL3ADHGFXPKQCUM';
+
+const mod = n => ((n % SIZE) + SIZE) % SIZE;
+const idx = ch => ALPHABET.indexOf(ch);
+const FWD = WIRINGS.map(w => Array.from(w, idx));
+const BWD = FWD.map(f => { const b = new Array(SIZE); f.forEach((o, i) => { b[o] = i; }); return b; });
+const REFL = Array.from(REFLECTOR, idx);
+
+// notches and positions are arrays of symbol indices, left to right.
+class Machine {
+  constructor(notches, start) {
+    this.notches = notches.slice();
+    this.positions = start.slice();
+  }
+  step() {
+    const at = this.positions.map((p, j) => p === this.notches[j]);
+    const last = NUM_ROTORS - 1;
+    for (let j = 0; j < NUM_ROTORS; j++) {
+      if (j === last || at[j + 1]) this.positions[j] = mod(this.positions[j] + 1);
+    }
+  }
+  encode(ch) {
+    this.step();
+    let i = idx(ch);
+    for (let j = NUM_ROTORS - 1; j >= 0; j--) {
+      const p = this.positions[j];
+      i = mod(FWD[j][mod(i + p)] - p);
+    }
+    i = REFL[i];
+    for (let j = 0; j < NUM_ROTORS; j++) {
+      const p = this.positions[j];
+      i = mod(BWD[j][mod(i + p)] - p);
+    }
+    return ALPHABET[i];
+  }
+}
+// ==== ENGINE END ====
+
+const PASS = " .,:;!?'\"()-_/+=@#&*%\n";   // typed straight through, not coded
+const STORE_KEY = 'notchwork.v1';
+const TOOTH = 8;                           // px per wheel ridge, matches --tooth
+const $ = (s, r = document) => r.querySelector(s);
+
+/* ---------- saved settings ---------- */
+const okArr = a => Array.isArray(a) && a.length === NUM_ROTORS && a.every(n => Number.isInteger(n) && n >= 0 && n < SIZE);
+const toIdx = s => Array.from(s, idx);
+function load() { try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return null; } }
+const stored = load();
+let savedStart = stored && okArr(stored.start) ? stored.start.slice() : toIdx('SSSSSS');
+const machine = new Machine(stored && okArr(stored.notches) ? stored.notches : toIdx('LIGWMC'), savedStart);
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ notches: machine.notches, start: savedStart })); } catch (e) { /* storage blocked */ }
+}
+
+/* ---------- elements ---------- */
+const rootEl = $('#machine'), rotorsEl = $('#rotors'), hintEl = $('#hint'), startEl = $('#startReadout');
+const outEl = $('#out'), inEl = $('#inEcho'), statusEl = $('#status'), screenEl = $('#screen');
+const notchBtn = $('#notchBtn'), copyBtn = $('#copyBtn'), clearBtn = $('#clearBtn'), keyboardEl = $('#keyboard');
+const trackEl = $('#track'), knobEl = $('#knob');
+
+for (let i = 0; i < NUM_ROTORS; i++) {
+  const u = document.createElement('div');
+  u.className = 'unit';
+  u.innerHTML =
+    '<div class="window" title="Rotor ' + (i + 1) + '">' +
+      '<div class="drum"><span class="dsym"></span><i class="cut"></i></div>' +
+      '<div class="lid"><span class="lsym"></span><i class="glare"></i></div>' +
+    '</div>' +
+    '<div class="wheel" title="Drag, scroll or press the arrow keys"></div>';
+  rotorsEl.appendChild(u);
+}
+const units = Array.from(rotorsEl.children);
+const wins = units.map(u => $('.window', u));
+const wheels = units.map(u => $('.wheel', u));
+const lsym = units.map(u => $('.lsym', u));
+const dsym = units.map(u => $('.dsym', u));
+
+/* ---------- state ---------- */
+let notchMode = false, sel = 0, outText = '', inText = '', history = [], tipShown = false;
+const spin = { pos: machine.positions.slice(), notch: machine.notches.slice() };   // unwrapped counts, for wheel animation
+const signed = (a, b) => { let d = mod(b - a); if (d > SIZE / 2) d -= SIZE; return d; };
+
+function setPos(i, v) {
+  v = mod(v);
+  const d = signed(machine.positions[i], v);
+  if (!d) return;
+  machine.positions[i] = v;
+  spin.pos[i] += d;
+}
+function setNotchVal(i, v) {
+  v = mod(v);
+  const d = signed(machine.notches[i], v);
+  if (!d) return;
+  machine.notches[i] = v;
+  spin.notch[i] += d;
+}
+function userSetPos(i, v) { setPos(i, v); history = []; renderRotors(); }
+function userSetNotch(i, v) { setNotchVal(i, v); history = []; persist(); renderRotors(); }
+function setValue(i, v) { if (notchMode) userSetNotch(i, v); else userSetPos(i, v); }
+function nudge(i, d) { setValue(i, (notchMode ? machine.notches[i] : machine.positions[i]) + d); }
+
+/* ---------- rendering ---------- */
+function setSym(el, ch) {
+  if (el.textContent !== ch) {
+    el.textContent = ch;
+    el.classList.remove('tick');
+    void el.offsetWidth;
+    el.classList.add('tick');
+  }
+}
+function renderRotors() {
+  for (let i = 0; i < NUM_ROTORS; i++) {
+    setSym(lsym[i], ALPHABET[machine.positions[i]]);
+    setSym(dsym[i], ALPHABET[machine.notches[i]]);
+    const s = notchMode ? spin.notch[i] : spin.pos[i];
+    wheels[i].style.setProperty('--off', (-s * TOOTH) + 'px');
+    units[i].classList.toggle('sel', i === sel);
+  }
+  startEl.textContent = savedStart.map(n => ALPHABET[n]).join('');
+}
+function renderScreen() {
+  outEl.textContent = '';
+  if (outText) {
+    outEl.append(document.createTextNode(outText));
+  } else {
+    const p = document.createElement('span');
+    p.className = 'placeholder';
+    p.textContent = notchMode ? 'Typing sets notches' : 'Type a message';
+    outEl.append(p);
+  }
+  const c = document.createElement('span');
+  c.className = 'cursor';
+  outEl.append(c);
+  inEl.textContent = inText;
+  outEl.scrollTop = outEl.scrollHeight;
+  statusEl.textContent = notchMode ? 'notch mode' : 'ready';
+  statusEl.classList.toggle('amber', notchMode);
+}
+
+let hintTimer = null;
+function defaultHint() {
+  return notchMode
+    ? 'Notch mode: click a rotor, then type a letter or number, or drag its wheel. Press Notch again to close the lids.'
+    : 'Spin a wheel to set the start. Slide to S to save it, or to R to return to it.';
+}
+function flashHint(msg) {
+  hintEl.textContent = msg;
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { hintEl.textContent = defaultHint(); }, 2800);
+}
+function reject() {
+  screenEl.classList.remove('reject');
+  void screenEl.offsetWidth;
+  screenEl.classList.add('reject');
+  flashHint('That symbol is not on the machine. Use letters, numbers, and basic punctuation.');
+}
+
+/* ---------- typing ---------- */
+function typeSymbol(ch) {
+  if (!tipShown && history.length === 0 && machine.positions.some((p, j) => p !== savedStart[j])) {
+    tipShown = true;
+    flashHint('The rotors are not at the saved start. Slide to S to save these letters as the start.');
+  }
+  const before = machine.positions.slice();
+  const out = machine.encode(ch);
+  history.push(before);
+  if (history.length > 5000) history.shift();
+  for (let i = 0; i < NUM_ROTORS; i++) spin.pos[i] += signed(before[i], machine.positions[i]);
+  outText += out;
+  inText += ch;
+  renderRotors();
+  renderScreen();
+}
+function passThrough(ch) {
+  history.push(machine.positions.slice());
+  outText += ch;
+  inText += ch;
+  renderScreen();
+}
+function undo() {
+  if (!history.length) {
+    flashHint(outText ? 'Cannot undo past a reset or a manual wheel change. Use Clear to wipe the screen.' : 'Nothing to undo.');
+    return;
+  }
+  const prev = history.pop();
+  for (let i = 0; i < NUM_ROTORS; i++) setPos(i, prev[i]);
+  outText = outText.slice(0, -1);
+  inText = inText.slice(0, -1);
+  renderRotors();
+  renderScreen();
+}
+
+function handleKey(k) {          // k is A-Z, 0-9, ' ' or 'Backspace'
+  if (k === 'Backspace') {
+    if (notchMode) { sel = Math.max(sel - 1, 0); renderRotors(); } else undo();
+  } else if (k === ' ') {
+    if (!notchMode) passThrough(' ');
+  } else if (notchMode) {
+    userSetNotch(sel, idx(k));
+    sel = Math.min(sel + 1, NUM_ROTORS - 1);
+    renderRotors();
+  } else {
+    typeSymbol(k);
+  }
+}
+
+/* ---------- keyboard drawing and lighting ---------- */
+const ROWS = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+const keyEls = {};
+function makeKey(k, label, cls) {
+  const b = document.createElement('button');
+  b.className = 'key' + (cls ? ' ' + cls : '');
+  b.dataset.k = k;
+  b.tabIndex = -1;
+  b.textContent = label;
+  keyEls[k] = b;
+  return b;
+}
+ROWS.forEach((row, r) => {
+  const rowEl = document.createElement('div');
+  rowEl.className = 'krow';
+  Array.from(row).forEach(ch => rowEl.appendChild(makeKey(ch, ch)));
+  if (r === 3) rowEl.appendChild(makeKey('Backspace', '⌫', 'fn'));
+  keyboardEl.appendChild(rowEl);
+});
+const spaceRow = document.createElement('div');
+spaceRow.className = 'krow';
+spaceRow.appendChild(makeKey(' ', 'space', 'space'));
+keyboardEl.appendChild(spaceRow);
+
+const litTimers = {}, litAt = {};
+function litOn(k) {
+  const el = keyEls[k];
+  if (!el) return;
+  clearTimeout(litTimers[k]);
+  el.classList.add('lit');
+  litAt[k] = performance.now();
+}
+function litOff(k) {
+  const el = keyEls[k];
+  if (!el) return;
+  const wait = Math.max(0, 150 - (performance.now() - (litAt[k] || 0)));
+  clearTimeout(litTimers[k]);
+  litTimers[k] = setTimeout(() => el.classList.remove('lit'), wait);
+}
+
+let activeKey = null;
+keyboardEl.addEventListener('pointerdown', e => {
+  const b = e.target.closest('.key');
+  if (!b) return;
+  e.preventDefault();
+  activeKey = b.dataset.k;
+  litOn(activeKey);
+  handleKey(activeKey);
+});
+document.addEventListener('pointerup', () => { if (activeKey) { litOff(activeKey); activeKey = null; } });
+document.addEventListener('pointercancel', () => { if (activeKey) { litOff(activeKey); activeKey = null; } });
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  switch (k) {
+    case 'ArrowUp':    e.preventDefault(); nudge(sel, 1); return;
+    case 'ArrowDown':  e.preventDefault(); nudge(sel, -1); return;
+    case 'ArrowLeft':  e.preventDefault(); sel = Math.max(sel - 1, 0); renderRotors(); return;
+    case 'ArrowRight': e.preventDefault(); sel = Math.min(sel + 1, NUM_ROTORS - 1); renderRotors(); return;
+    case 'Escape':     if (notchMode) toggleNotch(); return;
+    case 'Enter':      e.preventDefault(); if (notchMode) toggleNotch(); else if (!e.repeat) passThrough('\n'); return;
+    case 'Backspace':  e.preventDefault(); litOn('Backspace'); handleKey('Backspace'); return;
+    case 'Tab':        return;
+  }
+  if (k.length !== 1) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  const up = k.toUpperCase();
+  if (up.length === 1 && ALPHABET.includes(up)) { litOn(up); handleKey(up); }
+  else if (k === ' ') { litOn(' '); handleKey(' '); }
+  else if (!notchMode && PASS.includes(k)) passThrough(k);
+  else reject();
+});
+document.addEventListener('keyup', e => {
+  const k = e.key;
+  if (k === 'Backspace' || k === ' ') litOff(k);
+  else if (k.length === 1) litOff(k.toUpperCase());
+});
+
+document.addEventListener('paste', e => {
+  const t = (e.clipboardData || window.clipboardData).getData('text');
+  if (!t) return;
+  e.preventDefault();
+  if (notchMode) {
+    const cleaned = t.toUpperCase().replace(/[\s,\-]/g, '');
+    if (/^[A-Z0-9]{6}$/.test(cleaned)) {
+      Array.from(cleaned).forEach((c, i) => setNotchVal(i, idx(c)));
+      history = [];
+      persist();
+      renderRotors();
+      flashHint('Notches pasted.');
+    } else {
+      flashHint('Paste exactly six letters or numbers to set the notches.');
+    }
+    return;
+  }
+  let skipped = false;
+  for (const raw of t) {
+    if (raw === '\r') continue;
+    const ch = raw.toUpperCase();
+    if (ch.length === 1 && ALPHABET.includes(ch)) typeSymbol(ch);
+    else if (PASS.includes(raw)) passThrough(raw);
+    else skipped = true;
+  }
+  if (skipped) flashHint('Some symbols were skipped because the machine does not support them.');
+});
+
+/* ---------- rotors: drag, scroll, select ---------- */
+let drag = null;
+units.forEach((u, i) => {
+  [wins[i], wheels[i]].forEach(el => {
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      sel = i;
+      drag = { i, y: e.clientY, base: notchMode ? machine.notches[i] : machine.positions[i], steps: 0 };
+      renderRotors();
+    });
+    el.addEventListener('pointermove', e => {
+      if (!drag || drag.i !== i) return;
+      const s = Math.round((drag.y - e.clientY) / 9);
+      if (s !== drag.steps) { drag.steps = s; setValue(i, drag.base + s); }
+    });
+    const end = () => { if (drag && drag.i === i) drag = null; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  });
+  let lastWheel = 0;
+  u.addEventListener('wheel', e => {
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel < 70) return;
+    lastWheel = now;
+    sel = i;
+    nudge(i, e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+});
+
+/* ---------- notch lids ---------- */
+function toggleNotch() {
+  notchMode = !notchMode;
+  rootEl.classList.toggle('notch-mode', notchMode);
+  notchBtn.setAttribute('aria-pressed', String(notchMode));
+  if (notchMode) sel = 0;
+  renderRotors();
+  renderScreen();
+  hintEl.textContent = defaultHint();
+}
+notchBtn.addEventListener('click', () => { toggleNotch(); notchBtn.blur(); });
+
+/* ---------- slider: S / 0 / R ---------- */
+function setKnob(k) { knobEl.style.setProperty('--k', k); }
+function slideAction(act) {
+  if (act === 'S') {
+    savedStart = machine.positions.slice();
+    persist();
+    renderRotors();
+    rotorsEl.classList.remove('saved');
+    void rotorsEl.offsetWidth;
+    rotorsEl.classList.add('saved');
+    flashHint('Start position saved.');
+  } else {
+    for (let i = 0; i < NUM_ROTORS; i++) setPos(i, savedStart[i]);
+    history = [];
+    renderRotors();
+    flashHint('Rotors are back at the saved start.');
+  }
+}
+function fire(act) {
+  setKnob(act === 'S' ? 0 : 1);
+  slideAction(act);
+  setTimeout(() => setKnob(.5), 380);
+}
+document.querySelectorAll('.stop[data-act]').forEach(b => {
+  b.addEventListener('click', () => { fire(b.dataset.act); b.blur(); });
+});
+let knobDrag = false;
+knobEl.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  knobEl.setPointerCapture(e.pointerId);
+  knobEl.classList.add('drag');
+  knobDrag = true;
+});
+knobEl.addEventListener('pointermove', e => {
+  if (!knobDrag) return;
+  const r = trackEl.getBoundingClientRect();
+  const kh = knobEl.offsetHeight;
+  const k = Math.min(1, Math.max(0, (e.clientY - r.top - kh / 2) / (r.height - kh)));
+  setKnob(k);
+});
+function knobRelease() {
+  if (!knobDrag) return;
+  knobDrag = false;
+  knobEl.classList.remove('drag');
+  const k = parseFloat(knobEl.style.getPropertyValue('--k'));
+  if (k < .2) fire('S');
+  else if (k > .8) fire('R');
+  else setKnob(.5);
+}
+knobEl.addEventListener('pointerup', knobRelease);
+knobEl.addEventListener('pointercancel', knobRelease);
+
+/* ---------- copy and clear ---------- */
+function flashButton(btn, text) {
+  const old = btn.dataset.label || btn.textContent;
+  btn.dataset.label = old;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = old; }, 1100);
+}
+copyBtn.addEventListener('click', async () => {
+  copyBtn.blur();
+  if (!outText) { flashButton(copyBtn, 'Empty'); return; }
+  let ok = false;
+  try { await navigator.clipboard.writeText(outText); ok = true; }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = outText;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+    ta.remove();
+  }
+  flashButton(copyBtn, ok ? 'Copied' : 'Select it');
+});
+clearBtn.addEventListener('click', () => {
+  clearBtn.blur();
+  outText = '';
+  inText = '';
+  history = [];
+  renderScreen();
+  flashHint('Screen cleared. Slide to R to put the rotors back at the saved start.');
+});
+
+/* ---------- start ---------- */
+renderRotors();
+renderScreen();
+hintEl.textContent = defaultHint();
+})();
+</script>
+<script>
+// Offline support. Service workers only run on http(s), so opening the file directly skips this.
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+</script>
+</body>
+</html>
