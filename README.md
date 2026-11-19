@@ -4,7 +4,7 @@ A six-rotor cipher machine with a notch key. Type a message and the screen shows
 
 It runs in any browser, installs as an app on Android and Windows, and works offline. A Python version of the same machine sits beside it, and the two give identical output.
 
-Try it once you have published it (see below): `https://YOUR-USERNAME.github.io/notchwork/`
+Try it once you have published it (see below): `https://mentolis636.github.io/notchwork/`
 
 ## The key
 
