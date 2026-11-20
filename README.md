@@ -4,7 +4,7 @@ A six-rotor cipher machine with a notch key. Type a message and the screen shows
 
 It runs in any browser, installs as an app on Android and Windows, and works offline. A Python version of the same machine sits beside it, and the two give identical output.
 
-Try it once you have published it (see below): `https://mentolis636.github.io/notchwork/`
+Try it once you have published it (see below): `https://YOUR-USERNAME.github.io/notchwork/`
 
 ## The key
 
@@ -25,6 +25,8 @@ Open `index.html` in a browser, or visit your published copy.
 - Push the slider to **R** to rewind the rotors to the saved start. Backspace undoes the last symbol. **Clear** wipes the screen.
 
 Notches and the saved start position stay in your browser between visits. They never leave your device.
+
+Sounds are on by default: a typewriter click for every key, a tick each time you turn a rotor by hand, a slide and clunk from the red slider, and a heavy thud when the lids open and close. They are generated in the browser, so nothing downloads and they work offline. Press **Sound on** under the screen to mute them.
 
 ## Using the Python version
 

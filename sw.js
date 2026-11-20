@@ -1,6 +1,6 @@
 // Notchwork service worker: lets the app open without a connection.
 // Bump CACHE when you want every installed copy to drop its old files.
-const CACHE = 'notchwork-v1';
+const CACHE = 'notchwork-v2';
 const CORE = [
   './',
   'index.html',
